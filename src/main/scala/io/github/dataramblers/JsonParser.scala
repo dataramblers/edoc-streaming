@@ -16,7 +16,9 @@ case class Edoc(creators: Option[List[Person]],
                 issn_e: Option[String],
                 doi: Option[String],
                 pmid: Option[String],
-                eprintid: Integer)
+                eprintid: Integer,
+                score: Option[Double],
+                results: Option[Integer])
 
 object JsonParser {
 
