@@ -12,55 +12,73 @@ object ESLookup {
 
   val client = HttpClient(ElasticsearchClientUri("localhost", 9200))
 
+  def defaultEmptyVal(field: Option[AnyRef]): String = {
+    field match {
+      case Some(x) => x.toString
+      case None => ""
+    }
+  }
+
+  def defaultEmptyBoolean(field: Option[AnyRef]): Boolean = {
+    field match {
+      case Some(x) => x.toString.toBoolean
+      case None => false
+    }
+  }
+
   implicit object CrossrefHitReader extends HitReader[Crossref] {
     override def read(hit: Hit): Either[Throwable, Crossref] = {
-      Right(Crossref(hit.sourceAsMap("DOI").toString,
-        hit.sourceAsMap("ISBN").toString,
-        hit.sourceAsMap("ISSN").toString,
+      Right(Crossref(defaultEmptyVal(hit.sourceFieldOpt("DOI")),
+        defaultEmptyVal(hit.sourceFieldOpt("ISBN")),
+        defaultEmptyVal(hit.sourceFieldOpt("ISSN")),
         CrossrefPerson(
-          hit.sourceAsMap("author.ORCID").toString,
-          hit.sourceAsMap("author.`authenticated-orcid`").toString.toBoolean,
-          hit.sourceAsMap("author.family").toString,
-          hit.sourceAsMap("author.given").toString,
-          hit.sourceAsMap("author.name").toString,
-          hit.sourceAsMap("author.suffix").toString
+          defaultEmptyVal(hit.sourceFieldOpt("author.ORCID")),
+          defaultEmptyBoolean(hit.sourceFieldOpt("author.`authenticated-orcid`")),
+          defaultEmptyVal(hit.sourceFieldOpt("author.family")),
+          defaultEmptyVal(hit.sourceFieldOpt("author.given")),
+          defaultEmptyVal(hit.sourceFieldOpt("author.name")),
+          defaultEmptyVal(hit.sourceFieldOpt("author.suffix"))
         ),
         CrossrefPerson(
-          hit.sourceAsMap("editor.ORCID").toString,
-          hit.sourceAsMap("editor.`authenticated-orcid`").toString.toBoolean,
-          hit.sourceAsMap("editor.family").toString,
-          hit.sourceAsMap("editor.given").toString,
-          hit.sourceAsMap("editor.name").toString,
-          hit.sourceAsMap("editor.suffix").toString
+          defaultEmptyVal(hit.sourceFieldOpt("editor.ORCID")),
+          defaultEmptyBoolean(hit.sourceFieldOpt("editor.`authenticated-orcid`")),
+          defaultEmptyVal(hit.sourceFieldOpt("editor.family")),
+          defaultEmptyVal(hit.sourceFieldOpt("editor.given")),
+          defaultEmptyVal(hit.sourceFieldOpt("editor.name")),
+          defaultEmptyVal(hit.sourceFieldOpt("editor.suffix"))
         ),
-        hit.sourceAsMap("title").toString))
+        defaultEmptyVal(hit.sourceFieldOpt("title"))))
     }
   }
 
   def lookup(edoc: Edoc, index: String, doctype: String): Edoc = {
-    println((search(index / doctype) query buildQuery(edoc, index, doctype)).toString)
+    val query = search(index / doctype) query buildQuery(edoc, index, doctype)
+    client.show(query)
+    print(client.show(search(index / doctype) query buildQuery(edoc, index, doctype)))
     val sResponse: SearchResponse = client.execute {
       search(index / doctype) query buildQuery(edoc, index, doctype)
     }.await
-    println(sResponse.totalHits)
+    println(sResponse.maxScore)
     val serialisedResult = sResponse.to[Crossref]
-    // TODO: Is it required to wrap Crossref case class in Option in order to prevent exceptions if respective field is missing?
-    val doi = if (sResponse.totalHits > 0) serialisedResult(0).DOI else ""
-    if (sResponse.maxScore > 1.1 && doi != "")
-      edoc.copy(doi = Some(doi), score = Some(sResponse.maxScore), results = Some(sResponse.totalHits))
+    // TODO: Redefine threshold
+    if (sResponse.totalHits > 0 && sResponse.maxScore >= 1.1)
+      sResponse.hits.hits(0)
+      edoc.copy(doi = Some(serialisedResult(0).DOI), score = Some(sResponse.maxScore), results = Some(sResponse.totalHits))
     else
       edoc
   }
 
   private def buildQuery(edoc: Edoc, index: String, doctype: String): BoolQueryDefinition = {
-    BoolQueryDefinition(must = Seq(
-      titleMatch(edoc.title),
-      issnMatch(edoc.issn),
-      issnMatch(edoc.issn_e),
-      isbnMatch(edoc.isbn),
-      isbnMatch(edoc.isbn_e)).flatten ++
-      personNameMatch(edoc.editors, "editor").getOrElse(Seq()) ++
-      personNameMatch(edoc.creators, "author").getOrElse(Seq())
+    BoolQueryDefinition(
+      must = Seq(
+        titleMatch(edoc.title)).flatten ++
+        personNameMatch(edoc.editors, "editor").getOrElse(Seq()) ++
+        personNameMatch(edoc.creators, "author").getOrElse(Seq()),
+      should = Seq(
+        issnMatch(edoc.issn),
+        issnMatch(edoc.issn_e),
+        isbnMatch(edoc.isbn),
+        isbnMatch(edoc.isbn_e)).flatten
     )
   }
 
@@ -75,8 +93,9 @@ object ESLookup {
 
   private def personNameMatch(person: Option[List[Person]], parentField: String): Option[Seq[MatchQueryDefinition]] = person match {
     case Some(pers) => Some(pers flatMap (x => {
-      (if (x.given.isDefined) Seq(MatchQueryDefinition(field = parentField + ".given", value = x.given.get, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND))) else Seq()) ++
-        (if (x.family.isDefined) Seq(MatchQueryDefinition(field = parentField + ".family", value = x.family.get, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND))) else Seq())
+      // TODO: Find reasonable values for boost and fuzziness
+      (if (x.given.isDefined) Seq(MatchQueryDefinition(field = parentField + ".given", value = x.given.get, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND))) else Seq()) ++
+        (if (x.family.isDefined) Seq(MatchQueryDefinition(field = parentField + ".family", value = x.family.get, boost = Some(0.5), fuzziness = Some("5"), operator = Some(Operator.AND))) else Seq())
     }))
     case None =>
       None
@@ -85,6 +104,7 @@ object ESLookup {
   private def isbnMatch(title: Option[String]): Option[MatchQueryDefinition] = {
     title match {
       case Some(i) =>
+        // TODO: Find reasonable values for boost and fuzziness
         Some(MatchQueryDefinition(field = "isbn", value = Utilities.isbn10ToIsbn13(i), boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND)))
       case None =>
         None
@@ -94,6 +114,7 @@ object ESLookup {
   private def issnMatch(title: Option[String]): Option[MatchQueryDefinition] = {
     title match {
       case Some(t) =>
+        // TODO: Find reasonable values for boost and fuzziness
         Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND)))
       case None =>
         None
