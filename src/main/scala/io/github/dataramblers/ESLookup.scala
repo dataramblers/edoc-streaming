@@ -1,10 +1,10 @@
 package io.github.dataramblers
 
-import com.sksamuel.elastic4s.{ElasticsearchClientUri, IndexesAndTypes}
+import com.sksamuel.elastic4s.ElasticsearchClientUri
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.sksamuel.elastic4s.http.HttpClient
-import com.sksamuel.elastic4s.http.search.MultiSearchResponse
-import com.sksamuel.elastic4s.searches.{MultiSearchDefinition, SearchDefinition}
+import com.sksamuel.elastic4s.http.search.SearchResponse
+import com.sksamuel.elastic4s.searches.queries.BoolQueryDefinition
 import com.sksamuel.elastic4s.searches.queries.matches.MatchQueryDefinition
 import org.elasticsearch.index.query.Operator
 
@@ -13,59 +13,71 @@ object ESLookup {
   val client = HttpClient(ElasticsearchClientUri("localhost", 9200))
 
   def lookup(edoc: Edoc, index: String, doctype: String): Edoc = {
-    val sResponse: MultiSearchResponse = client.execute {
+    val sResponse: SearchResponse = client.execute {
       buildQuery(edoc, index, doctype)
     }.await
 
-    (for (res <- sResponse.responses)
-      yield (res.maxScore, res.totalHits, res.hits.hits.map(x => x.sourceAsMap).take(1)(0).get("DOI"))).foreach(println)
+    //    (for (res <- sResponse.responses)
+    //      yield (res.maxScore, res.totalHits, res.hits.hits.map(x => x.sourceAsMap).take(1)(0).get("DOI"))).foreach(println)
+    // val serialisedResult = sResponse.safeTo
+    //  serialisedResult.
 
-    // edoc.copy(doi = Some(), score = Some(), records = Some())
+    // TODO: Read out DOI correctly
+    if (sResponse.maxScore > 10 /* && sResponse.hits.hits.take(1) > 0 */ )
+      edoc.copy(doi = Some("wef"), score = Some(sResponse.maxScore), results = Some(sResponse.totalHits))
+    else
+      edoc
+
   }
 
-  private def buildQuery(edoc: Edoc, index: String, doctype: String): MultiSearchDefinition = {
-    MultiSearchDefinition(Seq(issnMatch(edoc.issn, index, doctype), titleMatch(edoc.title, index, doctype), isbnMatch(edoc.isbn, index, doctype)) ++
-      personMatch(edoc.creators, "author", index, doctype) ++
-      personMatch(edoc.editors, "editor", index, doctype))
+  private def buildQuery(edoc: Edoc, index: String, doctype: String): BoolQueryDefinition = {
+    BoolQueryDefinition(must = Seq(
+      titleMatch(edoc.title),
+      issnMatch(edoc.issn),
+      issnMatch(edoc.issn_e),
+      isbnMatch(edoc.isbn),
+      isbnMatch(edoc.isbn_e)).flatten ++
+      personNameMatch(edoc.editors).flatten ++
+      personNameMatch(edoc.creators).flatten
+    )
   }
 
-  private def titleMatch(title: Option[String], index: String, doctype: String): SearchDefinition = {
+  private def titleMatch(title: Option[String]): Option[MatchQueryDefinition] = {
     title match {
       case Some(t) =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = Some(MatchQueryDefinition(field = "title", value = t, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND))))
+        Some(MatchQueryDefinition(field = "title", value = t, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND)))
       case None =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = None)
+        None
     }
   }
 
-  private def personMatch(person: Option[List[Person]], personType: String, index: String, doctype: String): Seq[SearchDefinition] = {
-    person match {
-      case Some(pers) =>
-        pers.flatMap(p =>
-          Seq(SearchDefinition(IndexesAndTypes(index, doctype), query = Some(MatchQueryDefinition(field = personType + ".given", value = p.given, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND)))),
-            SearchDefinition(IndexesAndTypes(index, doctype), query = Some(MatchQueryDefinition(field = personType + ".family", value = p.family, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND))))
-          )
-        )
-      case None =>
-        Seq(SearchDefinition(IndexesAndTypes(index, doctype), query = None))
+  // TODO: Implement a function generating the following `Seq` according to the DRY principle
+  private def personNameMatch(person: Option[List[Person]]): Option[Seq[MatchQueryDefinition]] = person match {
+    case Some(pers) => pers match {
+      case p: List[Author] => Some(p flatMap (x => Seq(MatchQueryDefinition(field = "author.given", value = x.given, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND)),
+        MatchQueryDefinition(field = "author.family", value = x.family, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND)))))
+      case p: List[Editor] => Some(p flatMap (x => Seq(MatchQueryDefinition(field = "editor.given", value = x.given, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND)),
+        MatchQueryDefinition(field = "editor.family", value = x.family, boost = Some(0.5), fuzziness = Some("1"), operator = Some(Operator.AND)))))
     }
+    case None =>
+      None
   }
 
-  private def isbnMatch(title: Option[String], index: String, doctype: String): SearchDefinition = {
+  private def isbnMatch(title: Option[String]): Option[MatchQueryDefinition] = {
     title match {
       case Some(i) =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = Some(MatchQueryDefinition(field = "isbn", value = Utilities.isbn10ToIsbn13(i), boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND))))
+        Some(MatchQueryDefinition(field = "isbn", value = Utilities.isbn10ToIsbn13(i), boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND)))
       case None =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = None)
+        None
     }
   }
 
-  private def issnMatch(title: Option[String], index: String, doctype: String): SearchDefinition = {
+  private def issnMatch(title: Option[String]): Option[MatchQueryDefinition] = {
     title match {
       case Some(t) =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND))))
+        Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(0.5), fuzziness = Some("10"), operator = Some(Operator.AND)))
       case None =>
-        SearchDefinition(IndexesAndTypes(index, doctype), query = None)
+        None
     }
   }
 
