@@ -4,11 +4,18 @@ import org.json4s.DefaultFormats
 import org.json4s.native.JsonMethods._
 import org.json4s._
 
-case class Person(family: String,
-                  given: String)
+sealed abstract class Person {
+  val family: Option[String]
+  val given: Option[String]
+}
 
-case class Edoc(creators: Option[List[Person]],
-                editors: Option[List[Person]],
+case class Author(family: Option[String],
+                  given: Option[String]) extends Person
+case class Editor(family: Option[String],
+                         given: Option[String]) extends Person
+
+case class Edoc(creators: Option[List[Author]],
+                editors: Option[List[Editor]],
                 title: Option[String],
                 isbn: Option[String],
                 isbn_e: Option[String],
