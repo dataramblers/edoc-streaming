@@ -15,9 +15,9 @@ object EdocStreaming {
       .map(x => JsonParser.toEdoc(x))
       .filter(x => x.doi.isEmpty)
       .map(x => ESLookup.lookup(x, "crossref", "crossref"))
-    //
 
-    test.writeAsText(".")
+    // FIXME: Just for testing
+    test.print()
   }
 
 }
