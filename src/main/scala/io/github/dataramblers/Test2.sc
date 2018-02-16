@@ -32,7 +32,7 @@ def lookup(edoc: Edoc, index: String, doctype: String): SearchResponse = {
 def buildQuery(edoc: Edoc, index: String, doctype: String): BoolQueryDefinition = {
   BoolQueryDefinition(must = Seq(titleMatch(edoc.title, index, doctype).get) ++
     personMatch(edoc.creators, "author.given", index, doctype).get)
-    //personMatch(edoc.editors, "editor", index, doctype).get)
+  //personMatch(edoc.editors, "editor", index, doctype).get)
 }
 
 
