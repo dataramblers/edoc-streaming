@@ -28,11 +28,16 @@ object EdocStreaming {
 
   def jsonVal(field_name: String, field: Option[AnyVal]): String = {
     field match {
-      case Some(x) =>  "\"" + field_name + "\": " + x.toString + ", "
+      case Some(x) => "\"" + field_name + "\": " + x.toString + ", "
       case None => ""
     }
   }
-  def name(field: Option[String]): String = field match { case Some(x) => x ; case None => "" }
+
+  def name(field: Option[String]): String = field match {
+    case Some(x) => x;
+    case None => ""
+  }
+
   def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
 
   def jsonList(field_name: String, field: Option[List[Person]]): String = {
@@ -78,7 +83,9 @@ object EdocStreaming {
       val execute = Try(ESLookup.lookup(edoc, "crossref_v2", "crossref"))
       execute match {
         case Success(v) =>
-          ESLookup.client.execute { indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get) }
+          ESLookup.client.execute {
+            indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get)
+          }
           println("[SUCCESS] " + v.get.eprintid)
         case Failure(e) => println("[FAILED] " + e.getMessage)
       }
