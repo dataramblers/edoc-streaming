@@ -75,7 +75,7 @@ object EdocStreaming {
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
 
     def perform(edoc: Edoc): Unit = {
-      val execute = Try(ESLookup.lookup(edoc, "crossref", "crossref"))
+      val execute = Try(ESLookup.lookup(edoc, "crossref_v2", "crossref"))
       execute match {
         case Success(v) =>
           ESLookup.client.execute { indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get) }
