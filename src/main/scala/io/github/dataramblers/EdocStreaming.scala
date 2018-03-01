@@ -5,6 +5,7 @@ import java.util.zip.GZIPInputStream
 
 import com.sksamuel.elastic4s.Indexable
 import com.sksamuel.elastic4s.http.ElasticDsl._
+import com.typesafe.config.ConfigFactory
 
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
@@ -74,24 +75,31 @@ object EdocStreaming {
   }
 
   def main(args: Array[String]): Unit = {
-    val path = "/home/swissbib/PycharmProjects/uni_basel/crossrefproject/edoc-data.json.gz"
-    val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(path)))).mkString.split("\n")
+
+    val config = ConfigFactory.load()
+
+    println(config.getString("elasticsearch.host"))
+
+    val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(config.getString("sources.edoc-path"))))).mkString.split("\n")
 
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
 
-    def perform(edoc: Edoc): Unit = {
-      val execute = Try(ESLookup.lookup(edoc, "crossref", "crossref"))
+    def perform(edoc: Edoc, boostAndFuzzinessValues: (String, Double, String, Double, Double, Double, Double), esIndexCounter: String): Unit = {
+      val execute = Try(ESLookup.lookup(edoc, config.getString("sources.crossref-index"), config.getString("sources.crossref-type"), boostAndFuzzinessValues))
       execute match {
         case Success(v) =>
           ESLookup.client.execute {
-            indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get)
+            indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
           }
           println("[SUCCESS] " + v.get.eprintid)
         case Failure(e) => println("[FAILED] " + e.getMessage)
       }
     }
 
-    for (edoc <- asJson) perform(edoc)
+    for {
+      boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
+      edoc <- asJson
+    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-offset-counter") + boostAndFuzzinessValues._2).toString)
 
     println("FINISHED COMPARISON")
     System.exit(0)
