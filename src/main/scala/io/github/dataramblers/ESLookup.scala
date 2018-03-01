@@ -6,13 +6,14 @@ import com.sksamuel.elastic4s.http.HttpClient
 import com.sksamuel.elastic4s.http.search.SearchResponse
 import com.sksamuel.elastic4s.searches.queries.BoolQueryDefinition
 import com.sksamuel.elastic4s.searches.queries.matches.MatchQueryDefinition
+import org.apache.logging.log4j.scala.Logging
 import org.elasticsearch.index.query.Operator
 
 import scala.concurrent.duration._
 import scala.concurrent.Await
 import scala.util.{Failure, Success, Try}
 
-object ESLookup {
+object ESLookup extends Logging {
 
   val client = HttpClient(ElasticsearchClientUri("localhost", 8080))
 
@@ -73,9 +74,9 @@ object ESLookup {
     }
     val sResponse: SearchResponse = Await.result(result, 20.seconds)
     if (sResponse.maxScore > 0) {
-      println(search(index / datatype) query buildQuery(edoc, boostAndFuzziness))
-      println(sResponse.maxScore)
-      println(sResponse.hits.total)
+      logger.debug(search(index / datatype) query buildQuery(edoc, boostAndFuzziness))
+      logger.debug(s"${sResponse.maxScore}")
+      logger.debug(s"${sResponse.hits.total}")
     }
     val serialisedResult = sResponse.to[Crossref]
     // TODO: Redefine threshold

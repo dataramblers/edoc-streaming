@@ -15,7 +15,10 @@ lazy val root = (project in file(".")).
       "com.sksamuel.elastic4s" %% "elastic4s-core" % elastic4sVersion,
       "com.sksamuel.elastic4s" %% "elastic4s-http" % elastic4sVersion,
       "com.sksamuel.elastic4s" %% "elastic4s-json4s" % elastic4sVersion,
-      "org.json4s" %% "json4s-native" % "3.5.3"
+      "org.json4s" %% "json4s-native" % "3.5.3",
+      "org.apache.logging.log4j" % "log4j-core" % "2.10.0",
+      "org.apache.logging.log4j" % "log4j-api" % "2.10.0",
+      "org.apache.logging.log4j" %% "log4j-api-scala" % "11.0"
     )
   )
 

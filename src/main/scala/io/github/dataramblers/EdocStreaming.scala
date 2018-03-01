@@ -6,12 +6,13 @@ import java.util.zip.GZIPInputStream
 import com.sksamuel.elastic4s.Indexable
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.typesafe.config.ConfigFactory
+import org.apache.logging.log4j.scala.Logging
 
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 
-object EdocStreaming {
+object EdocStreaming extends Logging {
 
   def jsonRef(field_name: String, field: Option[AnyRef]): String = {
     field match {
@@ -78,11 +79,16 @@ object EdocStreaming {
 
     val config = ConfigFactory.load()
 
-    println(config.getString("elasticsearch.host"))
-
+    logger.info("Loading and parsing edoc file")
     val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(config.getString("sources.edoc-path"))))).mkString.split("\n")
-
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
+
+    for {
+      boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
+      edoc <- asJson
+    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-offset-counter") + boostAndFuzzinessValues._2).toString)
+
+    logger.info("FINISHED COMPARISON")
 
     def perform(edoc: Edoc, boostAndFuzzinessValues: (String, Double, String, Double, Double, Double, Double), esIndexCounter: String): Unit = {
       val execute = Try(ESLookup.lookup(edoc, config.getString("sources.crossref-index"), config.getString("sources.crossref-type"), boostAndFuzzinessValues))
@@ -91,17 +97,10 @@ object EdocStreaming {
           ESLookup.client.execute {
             indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
           }
-          println("[SUCCESS] " + v.get.eprintid)
+          logger.info("[SUCCESS] " + v.get.eprintid)
         case Failure(e) => println("[FAILED] " + e.getMessage)
       }
     }
 
-    for {
-      boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
-      edoc <- asJson
-    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-offset-counter") + boostAndFuzzinessValues._2).toString)
-
-    println("FINISHED COMPARISON")
-    System.exit(0)
   }
 }
