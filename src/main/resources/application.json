@@ -58,7 +58,6 @@
   "output": {
     "index-prefix": "output",
     "index-counter-offset": 0,
-    "type": "output",
-    "logfile": "./log.log"
+    "type": "output"
   }
 }
