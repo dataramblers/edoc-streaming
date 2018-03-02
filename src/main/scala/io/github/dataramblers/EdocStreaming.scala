@@ -91,14 +91,19 @@ object EdocStreaming extends Logging {
     logger.info("FINISHED COMPARISON")
 
     def perform(edoc: Edoc, boostAndFuzzinessValues: (String, Double, String, Double, Double, Double, Double), esIndexCounter: String): Unit = {
+      logger.info(s"Starting indexing with the following values: title fuzziness: ${boostAndFuzzinessValues._1}; " +
+        s"title boost: ${boostAndFuzzinessValues._2}; person fuzziness: ${boostAndFuzzinessValues._3}; " +
+        s"person boost: ${boostAndFuzzinessValues._4}; isbn boost: ${boostAndFuzzinessValues._5}; " +
+        s"issn boost: ${boostAndFuzzinessValues._6}; date boost: ${boostAndFuzzinessValues._7}")
+      logger.info(s"Indexing into ${config.getString("output.index") + esIndexCounter} / ${config.getString("output.type")}")
       val execute = Try(ESLookup.lookup(edoc, config.getString("sources.crossref-index"), config.getString("sources.crossref-type"), boostAndFuzzinessValues))
       execute match {
         case Success(v) =>
           ESLookup.client.execute {
             indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
           }
-          logger.info("[SUCCESS] " + v.get.eprintid)
-        case Failure(e) => println("[FAILED] " + e.getMessage)
+          logger.debug("[SUCCESS] " + v.get.eprintid)
+        case Failure(e) => logger.error("[FAILED] ${e.getMessage}")
       }
     }
 
