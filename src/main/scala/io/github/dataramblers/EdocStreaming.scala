@@ -35,13 +35,6 @@ object EdocStreaming extends Logging {
     }
   }
 
-  def name(field: Option[String]): String = field match {
-    case Some(x) => x;
-    case None => ""
-  }
-
-  def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
-
   def jsonList(field_name: String, field: Option[List[Person]]): String = {
     field match {
       case Some(x) =>
@@ -53,6 +46,13 @@ object EdocStreaming extends Logging {
         result
       case None => ""
     }
+  }
+
+  def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
+
+  def name(field: Option[String]): String = field match {
+    case Some(x) => x;
+    case None => ""
   }
 
   implicit object Edoc extends Indexable[Edoc] {
@@ -77,11 +77,13 @@ object EdocStreaming extends Logging {
 
   def main(args: Array[String]): Unit = {
 
-    val config = ConfigFactory.load()
+    val config = ConfigFactory.parseString(Source.fromFile(if (args.length > 0) args(0) else "config.json").mkString)
 
     logger.info("Loading and parsing edoc file")
     val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(config.getString("sources.edoc-path"))))).mkString.split("\n")
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
+
+    ElasticsearchClient.setup(config.getString("elasticsearch.host"), config.getInt("elasticsearch.port"))
 
     for {
       boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
@@ -96,10 +98,10 @@ object EdocStreaming extends Logging {
         s"person boost: ${boostAndFuzzinessValues._4}; isbn boost: ${boostAndFuzzinessValues._5}; " +
         s"issn boost: ${boostAndFuzzinessValues._6}; date boost: ${boostAndFuzzinessValues._7}")
       logger.info(s"Indexing into ${config.getString("output.index") + esIndexCounter} / ${config.getString("output.type")}")
-      val execute = Try(ESLookup.lookup(edoc, config.getString("sources.crossref-index"), config.getString("sources.crossref-type"), boostAndFuzzinessValues))
+      val execute = Try(ESLookup.lookup(edoc, config, boostAndFuzzinessValues))
       execute match {
         case Success(v) =>
-          ESLookup.client.execute {
+          ElasticsearchClient.getClient.execute {
             indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
           }
           logger.debug("[SUCCESS] " + v.get.eprintid)

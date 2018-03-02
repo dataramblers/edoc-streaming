@@ -1,42 +1,19 @@
 package io.github.dataramblers
 
-import com.sksamuel.elastic4s.{ElasticsearchClientUri, Hit, HitReader}
 import com.sksamuel.elastic4s.http.ElasticDsl._
-import com.sksamuel.elastic4s.http.HttpClient
 import com.sksamuel.elastic4s.http.search.SearchResponse
 import com.sksamuel.elastic4s.searches.queries.BoolQueryDefinition
 import com.sksamuel.elastic4s.searches.queries.matches.MatchQueryDefinition
+import com.sksamuel.elastic4s.{Hit, HitReader}
+import com.typesafe.config.Config
 import org.apache.logging.log4j.scala.Logging
 import org.elasticsearch.index.query.Operator
 
-import scala.concurrent.duration._
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 object ESLookup extends Logging {
-
-  val client = HttpClient(ElasticsearchClientUri("localhost", 8080))
-
-  def optionInt(field: Option[AnyRef]): Option[Int] = {
-    field match {
-      case Some(x) => Some(x.asInstanceOf[Int])
-      case None => None
-    }
-  }
-
-  def defaultEmptyVal(field: Option[AnyRef]): String = {
-    field match {
-      case Some(x) => x.toString
-      case None => ""
-    }
-  }
-
-  def defaultEmptyBoolean(field: Option[AnyRef]): Boolean = {
-    field match {
-      case Some(x) => x.toString.toBoolean
-      case None => false
-    }
-  }
 
   implicit object CrossrefHitReader extends HitReader[Crossref] {
     override def read(hit: Hit): Either[Throwable, Crossref] = {
@@ -66,15 +43,15 @@ object ESLookup extends Logging {
     }
   }
 
-  def lookup(edoc: Edoc, index: String, datatype: String, boostAndFuzziness: (String, Double, String, Double, Double, Double, Double)): Try[Edoc] = {
+  def lookup(edoc: Edoc, config: Config, boostAndFuzziness: (String, Double, String, Double, Double, Double, Double)): Try[Edoc] = {
     //val query = search(index / doctype) query buildQuery(edoc)
     //println(client.show(search(index / doctype) query buildQuery(edoc)))
-    val result = client.execute {
-      search(index / datatype) query buildQuery(edoc, boostAndFuzziness)
+    val result = ElasticsearchClient.getClient.execute {
+      search(config.getString("sources.crossref-index") / config.getString("sources.crossref-type")) query buildQuery(edoc, boostAndFuzziness)
     }
     val sResponse: SearchResponse = Await.result(result, 20.seconds)
     if (sResponse.maxScore > 0) {
-      logger.debug(search(index / datatype) query buildQuery(edoc, boostAndFuzziness))
+      logger.debug(search(config.getString("sources.crossref-index") / config.getString("sources.crossref-type")) query buildQuery(edoc, boostAndFuzziness))
       logger.debug(s"${sResponse.maxScore}")
       logger.debug(s"${sResponse.hits.total}")
     }
@@ -123,12 +100,23 @@ object ESLookup extends Logging {
       None
   }
 
-
   private def isbnMatch(isbn: Option[String], boost: Double): Option[MatchQueryDefinition] = {
     isbn match {
       case Some(i) =>
         // Ensure that only valid isbn's come as input.
         Some(MatchQueryDefinition(field = "isbn", value = Utilities.isbn10ToIsbn13(i), boost = Some(boost), fuzziness = None, operator = Some(Operator.AND)))
+      case None =>
+        None
+    }
+  }
+
+  private def issnMatch(issn: Option[String], boost: Double): Option[MatchQueryDefinition] = {
+    issn match {
+      case Some(t) =>
+        if (isValidISSN(t))
+          Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(boost), fuzziness = None, operator = Some(Operator.AND)))
+        else
+          None
       case None =>
         None
     }
@@ -157,18 +145,6 @@ object ESLookup extends Logging {
     }
   }
 
-  private def issnMatch(issn: Option[String], boost: Double): Option[MatchQueryDefinition] = {
-    issn match {
-      case Some(t) =>
-        if (isValidISSN(t))
-          Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(boost), fuzziness = None, operator = Some(Operator.AND)))
-        else
-          None
-      case None =>
-        None
-    }
-  }
-
   private def dateMatch(date: Option[Int], fieldName: String, boost: Double): Option[MatchQueryDefinition] = {
     date match {
       case Some(d) => Some(MatchQueryDefinition(field = fieldName, value = d, boost = Some(boost)))
@@ -176,7 +152,27 @@ object ESLookup extends Logging {
     }
   }
 
+  private def optionInt(field: Option[AnyRef]): Option[Int] = {
+    field match {
+      case Some(x) => Some(x.asInstanceOf[Int])
+      case None => None
+    }
+  }
 
-  class NoMatchFound(message: String, cause: Throwable) extends  Exception(message, cause)
+  private def defaultEmptyVal(field: Option[AnyRef]): String = {
+    field match {
+      case Some(x) => x.toString
+      case None => ""
+    }
+  }
+
+  private def defaultEmptyBoolean(field: Option[AnyRef]): Boolean = {
+    field match {
+      case Some(x) => x.toString.toBoolean
+      case None => false
+    }
+  }
+
+  class NoMatchFound(message: String, cause: Throwable) extends Exception(message, cause)
 
 }
