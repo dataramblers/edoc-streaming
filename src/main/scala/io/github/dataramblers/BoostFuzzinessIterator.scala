@@ -3,6 +3,7 @@ package io.github.dataramblers
 import com.typesafe.config.Config
 
 import scala.util.{Success, Try}
+import language.postfixOps
 
 object BoostFuzzinessIterator {
 
