@@ -5,12 +5,14 @@ import java.util.zip.GZIPInputStream
 
 import com.sksamuel.elastic4s.Indexable
 import com.sksamuel.elastic4s.http.ElasticDsl._
+import com.typesafe.config.ConfigFactory
+import org.apache.logging.log4j.scala.Logging
 
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
 
-object EdocStreaming {
+object EdocStreaming extends Logging {
 
   def jsonRef(field_name: String, field: Option[AnyRef]): String = {
     field match {
@@ -33,13 +35,6 @@ object EdocStreaming {
     }
   }
 
-  def name(field: Option[String]): String = field match {
-    case Some(x) => x;
-    case None => ""
-  }
-
-  def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
-
   def jsonList(field_name: String, field: Option[List[Person]]): String = {
     field match {
       case Some(x) =>
@@ -51,6 +46,13 @@ object EdocStreaming {
         result
       case None => ""
     }
+  }
+
+  def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
+
+  def name(field: Option[String]): String = field match {
+    case Some(x) => x;
+    case None => ""
   }
 
   implicit object Edoc extends Indexable[Edoc] {
@@ -74,26 +76,38 @@ object EdocStreaming {
   }
 
   def main(args: Array[String]): Unit = {
-    val path = "/home/swissbib/PycharmProjects/uni_basel/crossrefproject/edoc-data.json.gz"
-    val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(path)))).mkString.split("\n")
 
+    val config = ConfigFactory.parseString(Source.fromFile(if (args.length > 0) args(0) else "config.json").mkString)
+
+    logger.info("Loading and parsing edoc file")
+    val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(config.getString("sources.edoc-path"))))).mkString.split("\n")
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
 
-    def perform(edoc: Edoc): Unit = {
-      val execute = Try(ESLookup.lookup(edoc, "crossref_v2", "crossref"))
+    ElasticsearchClient.setup(config.getString("elasticsearch.host"), config.getInt("elasticsearch.port"))
+
+    for {
+      boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
+      edoc <- asJson
+    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-offset-counter") + boostAndFuzzinessValues._2).toString)
+
+    logger.info("FINISHED COMPARISON")
+
+    def perform(edoc: Edoc, boostAndFuzzinessValues: (String, Double, String, Double, Double, Double, Double), esIndexCounter: String): Unit = {
+      logger.info(s"Starting indexing with the following values: title fuzziness: ${boostAndFuzzinessValues._1}; " +
+        s"title boost: ${boostAndFuzzinessValues._2}; person fuzziness: ${boostAndFuzzinessValues._3}; " +
+        s"person boost: ${boostAndFuzzinessValues._4}; isbn boost: ${boostAndFuzzinessValues._5}; " +
+        s"issn boost: ${boostAndFuzzinessValues._6}; date boost: ${boostAndFuzzinessValues._7}")
+      logger.info(s"Indexing into ${config.getString("output.index") + esIndexCounter} / ${config.getString("output.type")}")
+      val execute = Try(ESLookup.lookup(edoc, config, boostAndFuzzinessValues))
       execute match {
         case Success(v) =>
-          ESLookup.client.execute {
-            indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get)
+          ElasticsearchClient.getClient.execute {
+            indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
           }
-          println("[SUCCESS] " + v.get.eprintid)
-        case Failure(e) => println("[FAILED] " + e.getMessage)
+          logger.debug("[SUCCESS] " + v.get.eprintid)
+        case Failure(e) => logger.error("[FAILED] ${e.getMessage}")
       }
     }
 
-    for (edoc <- asJson) perform(edoc)
-
-    println("FINISHED COMPARISON")
-    System.exit(0)
   }
 }
