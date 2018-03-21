@@ -84,7 +84,7 @@ object EdocStreaming {
       execute match {
         case Success(v) =>
           ESLookup.client.execute {
-            indexInto("compare_v4" / "result").id(v.get.eprintid).doc(v.get)
+            indexInto("compare_v5" / "result").id(v.get.eprintid).doc(v.get)
           }
           println("[SUCCESS] " + v.get.eprintid)
         case Failure(e) => println("[FAILED] " + e.getMessage)
