@@ -11,7 +11,7 @@ import org.elasticsearch.index.query.Operator
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.util.{Failure, Success, Try}
+import scala.util.{Success, Try}
 
 object ESLookup extends Logging {
 
@@ -112,36 +112,10 @@ object ESLookup extends Logging {
 
   private def issnMatch(issn: Option[String], boost: Double): Option[MatchQueryDefinition] = {
     issn match {
-      case Some(t) =>
-        if (isValidISSN(t))
-          Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(boost), fuzziness = None, operator = Some(Operator.AND)))
-        else
-          None
-      case None =>
+      case Some(t) if Utilities.isValidISSN(t) =>
+        Some(MatchQueryDefinition(field = "issn", value = t, boost = Some(boost), fuzziness = None, operator = Some(Operator.AND)))
+      case _ =>
         None
-    }
-  }
-
-  // Small calculation whether a ISSN has a valid format.
-  private def isValidISSN(issn: String): Boolean = {
-    val regex = "^\\d{4}-\\d{3}[\\dxX]$".r
-    regex.findFirstIn(issn) match {
-      case Some(t) =>
-        val asInt = Try(t.charAt(9).toInt)
-
-        def check(result: Try[Int]): Int = {
-          asInt match {
-            case Success(x) => x
-            case Failure(_) => 10
-          }
-        }
-
-        val total = t(0).toInt * 8 + t(1).toInt * 7 + t(2).toInt * 6 + t(3).toInt * 5 + t(5) * 4 + t(6) * 3 + t(7) * 2
-        val checkDigit = 11 - (total % 11)
-        if (checkDigit == check(asInt)) true
-        else false
-      case None =>
-        false
     }
   }
 
