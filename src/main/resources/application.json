@@ -1,0 +1,63 @@
+{
+  "sources": {
+    "edoc-path": "/home/seb/edoc_flattened.all.json.gz",
+    "crossref-index": "crossref",
+    "crossref-type": "crossref"
+  },
+  "elasticsearch": {
+    "host": "localhost",
+    "port": 9200
+  },
+  "reconciling": {
+    "title": {
+      "fuzziness": {
+        "from": 0,
+        "to": 2,
+        "step": 1
+      },
+      "boost": {
+        "from": 0,
+        "to": 2,
+        "step": 0.5
+      }
+    },
+    "person": {
+      "fuzziness": {
+        "from": 0,
+        "to": 2,
+        "step": 1
+      },
+      "boost": {
+        "from": 0,
+        "to": 2,
+        "step": 0.5
+      }
+    },
+    "isbn": {
+      "boost": {
+        "from": 0,
+        "to": 2,
+        "step": 0.5
+      }
+    },
+    "issn": {
+      "boost": {
+        "from": 0,
+        "to": 2,
+        "step": 0.5
+      }
+    },
+    "date": {
+      "boost": {
+        "from": 0,
+        "to": 2,
+        "step": 0.5
+      }
+    }
+  },
+  "output": {
+    "index-prefix": "edoc",
+    "index-counter-offset": 0,
+    "type": "edoc"
+  }
+}

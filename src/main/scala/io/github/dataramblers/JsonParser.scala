@@ -4,15 +4,15 @@ import org.json4s.DefaultFormats
 import org.json4s.native.JsonMethods._
 import org.json4s._
 
+
+case class Name(given: Option[String], family: Option[String])
+
 sealed abstract class Person {
-  val family: Option[String]
-  val given: Option[String]
+  val name: Name
 }
 
-case class Author(family: Option[String],
-                  given: Option[String]) extends Person
-case class Editor(family: Option[String],
-                         given: Option[String]) extends Person
+case class Author(name: Name) extends Person
+case class Editor(name: Name) extends Person
 
 case class Edoc(creators: Option[List[Author]],
                 editors: Option[List[Editor]],
@@ -24,8 +24,11 @@ case class Edoc(creators: Option[List[Author]],
                 doi: Option[String],
                 pmid: Option[String],
                 eprintid: Integer,
+                date: Option[Int],
                 score: Option[Double],
-                results: Option[Integer])
+                results: Option[Integer]) extends Throwable
+
+
 
 object JsonParser {
 
