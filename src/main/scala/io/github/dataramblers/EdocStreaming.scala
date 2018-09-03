@@ -79,7 +79,10 @@ object EdocStreaming extends Logging {
 
   def main(args: Array[String]): Unit = {
 
-    val config = ConfigFactory.parseString(Source.fromFile(if (args.length > 0) args(0) else "config.json").mkString)
+    val config = ConfigFactory.parseString((
+      if (args.length > 0) Source.fromFile(args(0))
+      else Source.fromInputStream(getClass.getResourceAsStream("/application.json"))).mkString
+    )
 
     logger.info("Loading and parsing edoc file")
     val edocRecords: Array[String] = Source.fromInputStream(new GZIPInputStream(new BufferedInputStream(new FileInputStream(config.getString("sources.edoc-path"))))).mkString.split("\n")
@@ -94,7 +97,7 @@ object EdocStreaming extends Logging {
     for {
       boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
       edoc <- asJson
-    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-offset-counter") + boostAndFuzzinessValues._2).toString)
+    } perform(edoc, boostAndFuzzinessValues._1, (config.getInt("output.index-counter-offset") + boostAndFuzzinessValues._2).toString)
 
     logger.info("FINISHED COMPARISON")
 
