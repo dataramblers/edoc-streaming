@@ -11,7 +11,6 @@ import org.elasticsearch.index.query.Operator
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.util.{Success, Try}
 
 object ESLookup extends Logging {
 
@@ -43,7 +42,7 @@ object ESLookup extends Logging {
     }
   }
 
-  def lookup(edoc: Edoc, config: Config, boostAndFuzziness: (String, Double, String, Double, Double, Double, Double)): Try[Edoc] = {
+  def lookup(edoc: Edoc, config: Config, boostAndFuzziness: (String, Double, String, Double, Double, Double, Double)): Edoc = {
     //val query = search(index / doctype) query buildQuery(edoc)
     //println(client.show(search(index / doctype) query buildQuery(edoc)))
     val result = ElasticsearchClient.getClient.execute {
@@ -65,8 +64,6 @@ object ESLookup extends Logging {
       logger.info(s"[FAILED] Could not find matching crossref document for edoc record ${edoc.eprintid}")
       edoc
     }
-    else
-      throw new NoMatchFound("Could not match edoc record " + edoc.eprintid.toString, edoc)
   }
 
   private def buildQuery(edoc: Edoc, boostAndFuzziness: (String, Double, String, Double, Double, Double, Double)): BoolQueryDefinition = {
@@ -99,7 +96,8 @@ object ESLookup extends Logging {
     case Some(pers) => Some(pers flatMap (x => {
       (if (x.name.given.isDefined) Seq(MatchQueryDefinition(field = parentField + ".given", value = x.name.given.get, boost = Some(boost), fuzziness = Some(fuzziness), operator = Some(Operator.AND))) else Seq()) ++
         (if (x.name.family.isDefined) Seq(MatchQueryDefinition(field = parentField + ".family", value = x.name.family.get, boost = Some(boost), fuzziness = Some(fuzziness), operator = Some(Operator.AND))) else Seq())
-    }))
+    }
+      ))
     case None =>
       None
   }

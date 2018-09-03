@@ -16,28 +16,28 @@ import scala.io.Source
 
 object EdocStreaming extends Logging {
 
-  def jsonRef(field_name: String, field: Option[AnyRef]): String = {
+  private def jsonRef(field_name: String, field: Option[AnyRef]) = {
     field match {
       case Some(x) => "\"" + field_name + "\": \"" + x.toString + "\", "
       case None => ""
     }
   }
 
-  def jsonRefInt(field_name: String, field: Option[AnyRef]): String = {
+  private def jsonRefInt(field_name: String, field: Option[AnyRef]) = {
     field match {
       case Some(x) => "\"" + field_name + "\": " + x.toString + ", "
       case None => ""
     }
   }
 
-  def jsonVal(field_name: String, field: Option[AnyVal]): String = {
+  private def jsonVal(field_name: String, field: Option[AnyVal]) = {
     field match {
       case Some(x) => "\"" + field_name + "\": " + x.toString + ", "
       case None => ""
     }
   }
 
-  def jsonList(field_name: String, field: Option[List[Person]]): String = {
+  private def jsonList(field_name: String, field: Option[List[Person]]) = {
     field match {
       case Some(x) =>
         var result = "\"" + field_name + "\": ["
@@ -50,14 +50,14 @@ object EdocStreaming extends Logging {
     }
   }
 
-  def jsonPerson(p: Person): String = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
+  private def jsonPerson(p: Person) = "{\"name\": {\"family\": \"" + name(p.name.family) + "\", \"given\": \"" + name(p.name.given) + "\" }}"
 
-  def name(field: Option[String]): String = field match {
+  private def name(field: Option[String]) = field match {
     case Some(x) => x;
     case None => ""
   }
 
-  implicit object Edoc extends Indexable[Edoc] {
+  implicit private object Edoc extends Indexable[Edoc] {
     override def json(t: Edoc): String = {
       var result: String = "{"
       result += jsonRef("title", t.title)
