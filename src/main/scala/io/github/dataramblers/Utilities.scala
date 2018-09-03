@@ -1,5 +1,9 @@
 package io.github.dataramblers
 
+import com.sksamuel.elastic4s.http.ElasticDsl._
+import com.sksamuel.elastic4s.http.index.CreateIndexResponse
+
+import scala.concurrent.Future
 import scala.util.{Failure, Success, Try}
 
 object Utilities {
@@ -48,6 +52,29 @@ object Utilities {
         else false
       case None =>
         false
+    }
+  }
+
+  def createEsIndex(index: String, docType: String): Future[CreateIndexResponse] = {
+    ElasticsearchClient.getClient.execute {
+      createIndex(index)
+        .mappings(
+          mapping(docType).fields(
+            textField("creators"),
+            textField("editors"),
+            textField("title"),
+            textField("isbn"),
+            textField("isbn_e"),
+            textField("issn"),
+            textField("issn_e"),
+            textField("doi"),
+            textField("pmid"),
+            intField("eprintid"),
+            intField("date"),
+            doubleField("score"),
+            doubleField("results")
+          )
+        )
     }
   }
 }

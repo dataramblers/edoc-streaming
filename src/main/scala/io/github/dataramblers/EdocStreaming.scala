@@ -84,6 +84,10 @@ object EdocStreaming extends Logging {
     val asJson = edocRecords.map(x => JsonParser.toEdoc(x))
 
     ElasticsearchClient.setup(config.getString("elasticsearch.host"), config.getInt("elasticsearch.port"))
+    Utilities.createEsIndex(config.getString(
+      "output.index-prefix") + config.getString("output.index-counter-offset"),
+      config.getString("output.type")
+    )
 
     for {
       boostAndFuzzinessValues <- BoostFuzzinessIterator.initialize(config).zipWithIndex
