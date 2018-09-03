@@ -59,7 +59,11 @@ object ESLookup extends Logging {
     // TODO: Redefine threshold
     if (sResponse.totalHits > 0 && sResponse.maxScore >= 1.1) {
       sResponse.hits.hits(0)
-      Success[Edoc](edoc.copy(doi = Some(serialisedResult(0).DOI), score = Some(sResponse.maxScore), results = Some(sResponse.totalHits)))
+      logger.debug(s"[SUCCESS] ${edoc.eprintid}")
+      edoc.copy(doi = Some(serialisedResult(0).DOI), score = Some(sResponse.maxScore), results = Some(sResponse.totalHits))
+    } else {
+      logger.info(s"[FAILED] Could not find matching crossref document for edoc record ${edoc.eprintid}")
+      edoc
     }
     else
       throw new NoMatchFound("Could not match edoc record " + edoc.eprintid.toString, edoc)

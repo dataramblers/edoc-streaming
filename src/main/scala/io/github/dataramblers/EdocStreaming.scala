@@ -7,9 +7,11 @@ import com.sksamuel.elastic4s.Indexable
 import com.sksamuel.elastic4s.http.ElasticDsl._
 import com.typesafe.config.ConfigFactory
 import org.apache.logging.log4j.scala.Logging
+import org.json4s.jackson.Serialization
+import org.json4s.jackson.Serialization.write
+import org.json4s.{Formats, NoTypeHints}
 
 import scala.io.Source
-import scala.util.{Failure, Success, Try}
 
 
 object EdocStreaming extends Logging {
@@ -101,15 +103,11 @@ object EdocStreaming extends Logging {
         s"title boost: ${boostAndFuzzinessValues._2}; person fuzziness: ${boostAndFuzzinessValues._3}; " +
         s"person boost: ${boostAndFuzzinessValues._4}; isbn boost: ${boostAndFuzzinessValues._5}; " +
         s"issn boost: ${boostAndFuzzinessValues._6}; date boost: ${boostAndFuzzinessValues._7}")
-      logger.info(s"Indexing into ${config.getString("output.index") + esIndexCounter} / ${config.getString("output.type")}")
-      val execute = Try(ESLookup.lookup(edoc, config, boostAndFuzzinessValues))
-      execute match {
-        case Success(v) =>
-          ElasticsearchClient.getClient.execute {
-            indexInto(config.getString("output.index") + esIndexCounter / config.getString("output.type")).id(v.get.eprintid).doc(v.get)
-          }
-          logger.debug("[SUCCESS] " + v.get.eprintid)
-        case Failure(e) => logger.error("[FAILED] ${e.getMessage}")
+      logger.info(s"Indexing into ${config.getString("output.index-prefix") + esIndexCounter} / ${config.getString("output.type")}")
+      val edoc_updated = ESLookup.lookup(edoc, config, boostAndFuzzinessValues)
+      implicit val formats: AnyRef with Formats = Serialization.formats(NoTypeHints)
+      ElasticsearchClient.getClient.execute {
+        indexInto((config.getString("output.index-prefix") + esIndexCounter) / config.getString("output.type")).id(edoc_updated.eprintid).doc(write(edoc_updated))
       }
     }
 
